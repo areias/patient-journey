@@ -18,27 +18,18 @@ import pandas as pd
 
 # ![](../synthea/schema.png)
 
-# In[4]:
+# In[1438]:
 
 
-db = Graph(scheme="bolt", host="northwestern.neo4j.kineviz.com", port=7713, secure=False, 
-                auth=('neo4j', 'northwesternAtNeo4j'))
+import importlib
+import secrets 
 
 
-# In[143]:
+# In[1434]:
 
 
-query="""MATCH (d:Patient)
-return id(d)
-limit 5"""
-
-df=db.run(query).to_data_frame()
-
-
-# In[144]:
-
-
-df
+db = Graph(scheme="bolt", host=secrets.host, port=secrets.port, secure=False, 
+                auth=(secrets.user, secrets.password))
 
 
 # In[568]:
@@ -143,17 +134,17 @@ remove=['Insertion of subcutaneous contraceptive',
 'Movement therapy (regime/therapy)',
 'Subcutaneous immunotherapy',
 'Spirometry (procedure)',
-       'Appendectomy',
-       'Information gathering (procedure)',
-       'Bone immobilization',
-        'Cognitive and behavioral therapy (regime/therapy)',
-       'Brief general examination (procedure)',
-       'Admission to burn unit', 'Allergy screening test',
-       'Sputum examination (procedure)',
-      'Suture open wound',
-       'Exercise class',
-       'Measurement of respiratory function (procedure)',
-       'Kitchen practice']
+'Appendectomy',
+'Information gathering (procedure)',
+'Bone immobilization',
+'Cognitive and behavioral therapy (regime/therapy)',
+'Brief general examination (procedure)',
+'Admission to burn unit', 'Allergy screening test',
+'Sputum examination (procedure)',
+'Suture open wound',
+'Exercise class',
+'Measurement of respiratory function (procedure)',
+'Kitchen practice']
 
 
 # In[1330]:
