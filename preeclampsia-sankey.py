@@ -6,6 +6,7 @@
 
 import numpy as np
 import re
+import datetime
 
 
 # In[97]:
@@ -40,10 +41,21 @@ df=db.run(query).to_data_frame()
 df
 
 
-# In[134]:
+# In[568]:
 
 
 query="""MATCH (c:Condition {description:"Preeclampsia"}) <-[:HAS_CONDITION]-(e)
+return count(e)
+"""
+df=db.run(query).to_data_frame()
+df
+
+
+# In[1316]:
+
+
+query="""MATCH (c:Condition {description:"Preeclampsia"}) <-[:HAS_CONDITION]-(e)
+with e
 MATCH (patient)-[:HAS_ENCOUNTER]-(e)-[:NEXT*]->(e2)-[:HAS_CONDITION|:HAS_DRUG|:HAS_CARE_PLAN|:HAS_ALLERGY|:HAS_PROCEDURE]->(x) 
 WHERE e2.date <= ( e.date + duration("P90D") )
 OPTIONAL MATCH (e2)-[:HAS_END]->(end)
@@ -55,142 +67,215 @@ RETURN labels(x)[0] AS eventType, x.description AS name,
 df=db.run(query).to_data_frame()
 
 
-# ![](one-patient-journey.png)
+# In[1317]:
 
-# In[135]:
+
+df.loc[df['patient']==34947]
+
+
+# In[1318]:
 
 
 df=df.drop_duplicates()
 
 
-# In[136]:
+# In[1319]:
 
 
-df[df['patient']==34946]
+df=df[df['eventType']=="Procedure"]
 
 
-# In[143]:
+# In[1320]:
 
 
-b=df[(df['patient']==34946) &(df['eventType']=="Procedure")]
-b['idx'] = b.groupby(['startDate']).ngroup()
+df[df['name']=="Preeclampsia"]
 
 
-# In[144]:
+# In[1321]:
 
 
-b
+df['startDate']=df['startDate'].apply(lambda x: pd.to_datetime(str(x.year)+"-"+str(x.month)+"-"+str(x.day)))
 
 
-# ![](patient-journey-2.png)
-
-# In[138]:
+# In[1322]:
 
 
-df[(df['patient']==34133) & (df['eventType']=="Procedure")]
+for p in df.patient.unique():
+    df.loc[df['patient']==p,'delta']=df.loc[df['patient']==p,'startDate']-df.loc[df['patient']==p,'startDate'].shift(1)
 
 
-# In[139]:
+# In[1323]:
 
 
-a=df[(df['patient']==34133) & (df['eventType']=="Procedure")]
+df['delta']=df['delta'].apply(lambda x: pd.Timedelta(x).days)
 
 
-# In[140]:
+# In[1324]:
 
 
-a['idx'] = a.groupby(['startDate']).ngroup()
+df['event']=np.nan
+for p in df.patient.unique():
+    df.loc[df['patient']==p,'event']=np.where(df.loc[df['patient']==p,'delta']>90,1,0)
+    df.loc[df['patient']==p,'event']=df.loc[df['patient']==p,'event'].cumsum()
 
 
-# In[141]:
+# In[1325]:
 
 
-a
+df.loc[df['patient']==34947]
 
 
-# In[153]:
+# In[1329]:
 
 
-d=df[(df['patient']==1013) & (df['eventType']=="Procedure")]
-d['idx'] = d.groupby(['startDate']).ngroup()
+remove=['Insertion of subcutaneous contraceptive',
+'Review of systems (procedure)',
+'Extraction of wisdom tooth',
+'Insertion of intrauterine contraceptive device',
+'Throat culture (procedure)',
+'Nasal sinus endoscopy (procedure)',
+'Face mask (physical object)',
+'Oxygen administration by mask (procedure)',
+'Placing subject in prone position (procedure)',
+'Plain chest X-ray (procedure)',
+'Medication Reconciliation (procedure)',
+'Bilateral tubal ligation',
+'Movement therapy (regime/therapy)',
+'Subcutaneous immunotherapy',
+'Spirometry (procedure)',
+       'Appendectomy',
+       'Information gathering (procedure)',
+       'Bone immobilization',
+        'Cognitive and behavioral therapy (regime/therapy)',
+       'Brief general examination (procedure)',
+       'Admission to burn unit', 'Allergy screening test',
+       'Sputum examination (procedure)',
+      'Suture open wound',
+       'Exercise class',
+       'Measurement of respiratory function (procedure)',
+       'Kitchen practice']
 
 
-# In[154]:
+# In[1330]:
 
 
-d
+df=df.loc[~df['name'].isin(remove)]
 
 
-# In[155]:
+# In[1331]:
 
 
-c=a.append(b)
-c=c.append(d)
+df.name.unique()
 
 
-# In[161]:
+# In[1332]:
 
 
-#dictionary where 
-
-c[(c['patient']==34133) & (c['idx']==0)]
+df['event'].unique()
 
 
-# In[162]:
+# In[1333]:
 
 
-c[(c['patient']==34133) & (c['idx']==1)]
+for p in df.patient.unique():
+    
+    for e in df[df['patient']==p]['event'].unique():
+        new_date=(df.loc[(df['patient']==p) & (df['event']==e),"startDate"].head(1) - datetime.timedelta(30))
+
+        df=df.append({"eventType":"Procedure",
+                                          "name": "Preeclampsia",
+                                          "startDate": new_date.item(),
+                                          "endDate": np.nan, 
+                                          "patient": p,
+                                          "isEnd": "False",
+                                        "delta": 0,
+                                         "event": e},ignore_index=True)
 
 
-# In[179]:
+# In[1334]:
+
+
+df=df.sort_values(["patient","startDate","event"])
+
+
+# In[1335]:
+
+
+df.loc[df['patient']==34947]
+
+
+# In[1336]:
+
+
+df['idx']=np.nan
+for p in df.patient.unique():
+    for e in  df.loc[df['patient']==p,"event"].unique():
+        df.loc[(df['patient']==p) & (df['event']==e),'idx']=df.loc[(df['patient']==p ) & (df['event']==e)].groupby("startDate").ngroup()
+
+
+# In[1337]:
+
+
+df.loc[df['patient']==34947]
+
+
+# In[1338]:
+
+
+df.patient.nunique()
+
+
+# In[1339]:
 
 
 import itertools
 from collections import defaultdict
 
 
-# In[181]:
+# In[1367]:
 
 
 mydict=defaultdict(list)
-for p in c.patient.unique():
-    for i in c.idx.unique()[:-1]:
-        mydict[p] += list(itertools.product(
-            c[(c['patient']==p) & (c['idx']==i)]['name']+"_"+str(i), 
-          c[(c['patient']==p) & (c['idx']==i+1)]['name']+"_"+str(i+1)))
+for p in df.patient.unique():
+    for e in df.loc[df['patient']==p]['event'].unique():
+        for i in df.idx.unique()[:-1]:
+            pid=str(p)+"_"+str(e)
+            mydict[pid] += list(itertools.product(
+                df[(df['patient']==p) & (df['event']==e) & (df['idx']==i)]['name']+"_"+str(int(i)), 
+              df[(df['patient']==p) & (df['event']==e) & (df['idx']==i+1)]['name']+"_"+str(int(i+1))))
 
 
-# In[182]:
+# In[1341]:
 
 
-mydict
+len(mydict)
 
 
-# In[187]:
+# In[1369]:
 
 
 output_values=list(mydict.values())
 
 
-# In[189]:
+# In[1370]:
+
+
+len(output_values)
+
+
+# In[1371]:
 
 
 from collections import Counter
 
 
-# In[190]:
+# In[1372]:
 
 
 frequency = dict(Counter(x for xs in output_values for x in set(xs)))       
 
 
-# In[191]:
-
-
-frequency
-
-
-# In[208]:
+# In[1373]:
 
 
 sankey = {"links": [], "nodes": []}
@@ -213,25 +298,13 @@ for i, y in frequency.items():     #links are created first, from items of frequ
                 sankey["nodes"].append(name)  
 
 
-# In[209]:
-
-
-sankey
-
-
-# In[210]:
+# In[1374]:
 
 
 sorted_nodes = sorted(sankey['nodes'], key=lambda k: (k['step']))
 
 
-# In[211]:
-
-
-sorted_nodes
-
-
-# In[212]:
+# In[1375]:
 
 
 for w, node in enumerate(sorted_nodes):
@@ -239,13 +312,48 @@ for w, node in enumerate(sorted_nodes):
     node['color'] = 'rgba(31, 119, 180, 0.8)' 
 
 
-# In[213]:
+# In[1376]:
 
 
-sorted_nodes
+len(set([x['station'] for x in sorted_nodes]))
 
 
-# In[214]:
+# In[1377]:
+
+
+cols=['rgb(215,48,39)','rgb(244,109,67)','rgb(253,174,97)','rgb(254,224,144)','rgb(255,255,191)','rgb(224,243,248)','rgb(171,217,233)','rgb(116,173,209)','rgb(69,117,180)',
+     'rgb(197,27,125)','rgb(222,119,174)','rgb(241,182,218)','rgb(253,224,239)','rgb(247,247,247)','rgb(230,245,208)','rgb(184,225,134)','rgb(127,188,65)','rgb(77,146,33)',
+      'rgb(255,247,236)','rgb(254,232,200)']#,'rgb(253,212,158)','rgb(253,187,132)','rgb(252,141,89)','rgb(239,101,72)','rgb(215,48,31)','rgb(179,0,0)','rgb(127,0,0)',
+     #'rgb(178,24,43)','rgb(214,96,77)']#,'rgb(244,165,130)']#,'rgb(253,219,199)','rgb(247,247,247)','rgb(209,229,240)','rgb(146,197,222)','rgb(67,147,195)','rgb(33,102,172)']
+
+
+# In[1378]:
+
+
+len(cols)
+
+
+# In[1379]:
+
+
+color_dict=[{x[0]:x[1] } for x in list(zip(set([x['station'] for x in sorted_nodes]), cols))]
+
+
+# In[1380]:
+
+
+from collections import ChainMap
+
+data = dict(ChainMap(*color_dict))
+
+
+# In[1381]:
+
+
+data['Preeclampsia']
+
+
+# In[1382]:
 
 
 def id_lookup(node, sorted_list):
@@ -254,41 +362,29 @@ def id_lookup(node, sorted_list):
             return item['id']
 
 
-# In[215]:
+# In[1383]:
 
 
 for d in sankey['links']: 
     d['source_id'] = id_lookup(d, sorted_nodes)    
 
 
-# In[216]:
-
-
-d
-
-
-# In[217]:
+# In[1384]:
 
 
 sorted_links = sorted(sankey['links'], key=lambda k: (k['source_id']))  
 
 
-# In[218]:
-
-
-sorted_links
-
-
-# In[221]:
+# In[1385]:
 
 
 nodes = dict(
             label = [node['name'] for node in sorted_nodes],
-            color = [node['color'] for node in sorted_nodes]
+            color = [data[node['station']] for node in sorted_nodes]
         )
 
 
-# In[222]:
+# In[1386]:
 
 
 link = dict(
@@ -299,27 +395,21 @@ link = dict(
             
 
 
-# In[224]:
+# In[1387]:
 
 
 data = dict(nodes=nodes,
         link=link)
 
 
-# In[225]:
-
-
-data
-
-
-# In[239]:
+# In[1388]:
 
 
 import plotly as py
 from plotly.offline import iplot
 
 
-# In[240]:
+# In[1397]:
 
 
 
@@ -333,8 +423,8 @@ data_trace = dict(
     valueformat = ".0f",
     valuesuffix = "Patients",
     node = dict(
-      pad = 15,
-      thickness = 15,
+      pad = 5,
+      thickness = 10,
       line = dict(
         color = "black",
         width = 0.5
@@ -354,13 +444,27 @@ data_trace = dict(
 
 layout =  dict(
     title = "Patient Flow Analysis",
+    width=1000,
+    height=1000,
     font = dict(
-      size = 10
-    )
+      size = 10   )
 )
 
 fig = dict(data=[data_trace], layout=layout)
 py.offline.iplot(fig, validate = False)
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
 
 
 # In[ ]:
